@@ -4,13 +4,16 @@ const bcript = require('bcryptjs');
 const express = require('express');
 const dotenv = require('dotenv');
 const hbs = require('hbs');
+const cookies_parser = require("cookie-parser");
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
 require("./db/conn");
-const Register = require("../src/model/scema")
+const Register = require("../src/model/scema");
+const auth = require("./middelware/auth");
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use( cookies_parser());
 
 const static_path = path.join(__dirname, '../public');
 const templates_path = path.join(__dirname, '../templates/views');
@@ -24,7 +27,7 @@ app.set("view engine", "hbs");
 app.set("views", templates_path);
 hbs.registerPartials(partials_path);
 
-console.log(process.env.SECRET_KEY);
+// console.log(process.env.SECRET_KEY);
 
 app.get("/", (req, res) => {
     res.render("index")
@@ -66,9 +69,14 @@ app.post("/register", async (req, res) => {
             const token = await userData.generatingToken();
             console.log("the token part" + token);
 
+            // geneting cookies
+            res.cookie("jwt", token,{
+                expires:new Date(Date.now()+30000),
+                httpOnly:true
+            });
+            // console.log(cookie);
+
             //    save the sata into database
-
-
             const Registered = await userData.save();
             res.status(200).render('index');
 
@@ -81,6 +89,12 @@ app.post("/register", async (req, res) => {
 });
 
 
+//  About page or secrte page
+
+app.get("/about",auth, (req, res) => {
+    console.log(`the cookies is ${req.cookies.jwt}`);
+    res.render("about");
+});
 // Login section
 
 app.get("/login", (req, res) => {
@@ -97,7 +111,14 @@ app.post("/login", async (req, res) => {
     const isMatch = await bcript.compare(pass, validEmail.password);
 
     const token = await validEmail.generatingToken();
-    console.log("the token part" + token)
+    // console.log("the token part" + token)
+
+
+    res.cookie("jwt", token,{
+        expires:new Date(Date.now()+600000),
+        httpOnly:true
+        
+    });
 
     // res.send(validEmail.password);
     // console.log(validEmail);
@@ -112,6 +133,25 @@ app.post("/login", async (req, res) => {
         res.send("Ivalid User")
     }
 });
+
+app.get("/logout" , auth , async(req , res)=>{
+    try {
+        // console.log(req.user);
+
+  req.user.tokens= req.user.tokens.filter((val)=>{
+      return val.token != req.token
+  })
+
+
+        res.clearCookie("jwt");
+        consol.log("logout Succesfull");
+        await req.user.save();
+        res.render("login");
+
+    } catch (error) {
+       res.status(500).send(error); 
+    }
+})
 
 
 
